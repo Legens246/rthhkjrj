@@ -143,6 +143,14 @@ function parseTopic(topic = "") {
   };
 }
 
+async function resolveTicketCategoryId(guild, configuredId) {
+  const ch = await guild.channels.fetch(configuredId);
+  if (!ch) return null;
+  if (ch.type === ChannelType.GuildCategory) return ch.id;
+  if ("parentId" in ch && ch.parentId) return ch.parentId;
+  return null;
+}
+
 client.once("ready", async () => {
   await registerCommands();
   console.log(`Logged in as ${client.user.tag}`);
@@ -306,6 +314,14 @@ client.on("interactionCreate", async (interaction) => {
       await interaction.deferReply({ ephemeral: true });
 
       if (interaction.customId === IDS.modalBug) {
+        const bugCategoryId = await resolveTicketCategoryId(interaction.guild, BUG_CATEGORY_ID);
+        if (!bugCategoryId) {
+          await interaction.editReply(
+            "Не удалось найти категорию для bug-тикетов. Укажи ID категории или канал внутри категории в BUG_CATEGORY_ID."
+          );
+          return;
+        }
+
         const existing = await findExistingTicket(interaction.guild, interaction.user.id, "bug");
         if (existing) {
           await interaction.editReply(`У тебя уже есть открытый тикет: ${existing}`);
@@ -322,7 +338,7 @@ client.on("interactionCreate", async (interaction) => {
         const ticketChannel = await interaction.guild.channels.create({
           name: channelName,
           type: ChannelType.GuildText,
-          parent: BUG_CATEGORY_ID,
+          parent: bugCategoryId,
           topic: `ticket_owner:${interaction.user.id}|ticket_type:bug`,
           permissionOverwrites: [
             {
@@ -379,6 +395,17 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (interaction.customId === IDS.modalSupport) {
+        const supportCategoryId = await resolveTicketCategoryId(
+          interaction.guild,
+          SUPPORT_CATEGORY_ID
+        );
+        if (!supportCategoryId) {
+          await interaction.editReply(
+            "Не удалось найти категорию для support-тикетов. Укажи ID категории или канал внутри категории в SUPPORT_CATEGORY_ID."
+          );
+          return;
+        }
+
         const existing = await findExistingTicket(interaction.guild, interaction.user.id, "support");
         if (existing) {
           await interaction.editReply(`У тебя уже есть открытый тикет: ${existing}`);
@@ -393,7 +420,7 @@ client.on("interactionCreate", async (interaction) => {
         const ticketChannel = await interaction.guild.channels.create({
           name: channelName,
           type: ChannelType.GuildText,
-          parent: SUPPORT_CATEGORY_ID,
+          parent: supportCategoryId,
           topic: `ticket_owner:${interaction.user.id}|ticket_type:support`,
           permissionOverwrites: [
             {
