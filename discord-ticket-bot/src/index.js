@@ -230,6 +230,8 @@ async function closeTicketWithReport(interaction, reason) {
     return;
   }
 
+  const ticketSummary = await getTicketSummary(channel, topic.type);
+
   let dmStatus = "не доставлен (закрыты ЛС или нет доступа)";
   try {
     const owner = await client.users.fetch(topic.ownerId);
@@ -241,7 +243,8 @@ async function closeTicketWithReport(interaction, reason) {
         { name: "Тип тикета", value: ticketTypeLabel(topic.type) },
         { name: "Канал", value: `#${channel.name}` },
         { name: "Закрыл", value: `<@${interaction.user.id}>` },
-        { name: "Причина", value: reason }
+        { name: "Причина", value: reason },
+        { name: "Описание заявки", value: cut(ticketSummary, 1000) }
       )
       .setTimestamp();
 
@@ -273,6 +276,47 @@ async function closeTicketWithReport(interaction, reason) {
       console.error("Failed to delete ticket channel:", error);
     }
   }, 8000);
+}
+
+async function getTicketSummary(channel, type) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 50 });
+    const ticketMessage = messages.find(
+      (m) =>
+        m.author?.id === client.user.id &&
+        m.embeds?.length > 0 &&
+        (m.embeds[0].title === "Новый баг-репорт" || m.embeds[0].title === "Новый support-тикет")
+    );
+
+    if (!ticketMessage) return "Описание не найдено в текущем тикете.";
+
+    const embed = ticketMessage.embeds[0];
+    const fields = embed.fields ?? [];
+    const getField = (name) => fields.find((f) => f.name === name)?.value ?? "Не указано";
+
+    if (type === "bug") {
+      return [
+        `Версия лаунчера: ${getField("Версия лаунчера")}`,
+        `Версия Minecraft: ${getField("Версия Minecraft")}`,
+        `Загрузчик: ${getField("Загрузчик")}`,
+        `Описание: ${getField("Описание проблемы")}`,
+        `Скриншот: ${getField("Скриншот")}`
+      ].join("\n");
+    }
+
+    if (type === "support") {
+      return [
+        `Тема: ${getField("Тема")}`,
+        `Описание: ${getField("Описание")}`,
+        `Доказательства: ${getField("Доказательства")}`
+      ].join("\n");
+    }
+
+    return "Тип заявки не определен.";
+  } catch (error) {
+    console.error("Failed to get ticket summary:", error);
+    return "Не удалось получить описание заявки.";
+  }
 }
 
 client.once("clientReady", async () => {
@@ -436,8 +480,13 @@ client.on("interactionCreate", async (interaction) => {
           });
           return;
         }
+        if (canManageTicket(interaction.member)) {
+          await showCloseReasonModal(interaction);
+          return;
+        }
 
-        await showCloseReasonModal(interaction);
+        await interaction.deferReply({ ephemeral: true });
+        await closeTicketWithReport(interaction, "Закрыто пользователем.");
         return;
       }
     }
