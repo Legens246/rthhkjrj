@@ -244,7 +244,25 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "ticket-panel") {
         const { embed, row } = buildTicketPanel();
-        await interaction.reply({ embeds: [embed], components: [row] });
+        await interaction.reply({
+          content: "Пробую отправить панель тикетов в этот канал...",
+          ephemeral: true
+        });
+
+        if (!interaction.channel || !interaction.channel.isTextBased()) {
+          await interaction.editReply("Не удалось определить текстовый канал для панели.");
+          return;
+        }
+
+        try {
+          await interaction.channel.send({ embeds: [embed], components: [row] });
+          await interaction.editReply("Панель тикетов отправлена.");
+        } catch (error) {
+          console.error("Failed to post ticket panel:", error);
+          await interaction.editReply(
+            "Не смог отправить панель в канал. Проверь права бота: View Channels, Send Messages, Embed Links."
+          );
+        }
         return;
       }
 
