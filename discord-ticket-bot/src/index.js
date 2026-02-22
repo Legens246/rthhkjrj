@@ -158,6 +158,12 @@ function ticketTypeLabel(type) {
   return "Неизвестно";
 }
 
+function cut(text, max = 1024) {
+  const raw = String(text ?? "");
+  if (raw.length <= max) return raw;
+  return `${raw.slice(0, max - 3)}...`;
+}
+
 async function showCloseReasonModal(interaction) {
   const modal = new ModalBuilder().setCustomId(IDS.modalClose).setTitle("Закрытие тикета");
   const reasonInput = new TextInputBuilder()
@@ -318,7 +324,7 @@ client.on("interactionCreate", async (interaction) => {
           .setLabel("Описание проблемы")
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true)
-          .setMaxLength(1000);
+          .setMaxLength(900);
 
         const screenshot = new TextInputBuilder()
           .setCustomId("screenshot")
@@ -354,7 +360,7 @@ client.on("interactionCreate", async (interaction) => {
           .setLabel("Описание ситуации")
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true)
-          .setMaxLength(1200);
+          .setMaxLength(900);
 
         const proof = new TextInputBuilder()
           .setCustomId("proof")
@@ -463,11 +469,11 @@ client.on("interactionCreate", async (interaction) => {
           .setColor(0xed4245)
           .addFields(
             { name: "Пользователь", value: `<@${interaction.user.id}>` },
-            { name: "Версия лаунчера", value: launcherVersion },
-            { name: "Версия Minecraft", value: minecraftVersion },
-            { name: "Загрузчик", value: loader },
-            { name: "Описание проблемы", value: description },
-            { name: "Скриншот", value: screenshot }
+            { name: "Версия лаунчера", value: cut(launcherVersion, 256) },
+            { name: "Версия Minecraft", value: cut(minecraftVersion, 256) },
+            { name: "Загрузчик", value: cut(loader, 256) },
+            { name: "Описание проблемы", value: cut(description, 1000) },
+            { name: "Скриншот", value: cut(screenshot, 1000) }
           )
           .setTimestamp();
 
@@ -542,9 +548,9 @@ client.on("interactionCreate", async (interaction) => {
           .setColor(0x5865f2)
           .addFields(
             { name: "Пользователь", value: `<@${interaction.user.id}>` },
-            { name: "Тема", value: reason },
-            { name: "Описание", value: details },
-            { name: "Доказательства", value: proof }
+            { name: "Тема", value: cut(reason, 256) },
+            { name: "Описание", value: cut(details, 1000) },
+            { name: "Доказательства", value: cut(proof, 1000) }
           )
           .setTimestamp();
 
@@ -573,10 +579,14 @@ client.on("interactionCreate", async (interaction) => {
     }
   } catch (error) {
     console.error(error);
+    const errorText = error?.message ? String(error.message).slice(0, 180) : "Unknown error";
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "Произошла ошибка при обработке запроса.", ephemeral: true });
+      await interaction.reply({
+        content: `Произошла ошибка при обработке запроса: ${errorText}`,
+        ephemeral: true
+      });
     } else if (interaction.isRepliable() && interaction.deferred && !interaction.replied) {
-      await interaction.editReply("Произошла ошибка при обработке запроса.");
+      await interaction.editReply(`Произошла ошибка при обработке запроса: ${errorText}`);
     }
   }
 });
