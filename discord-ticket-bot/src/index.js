@@ -145,11 +145,15 @@ function parseTopic(topic = "") {
 }
 
 async function resolveTicketCategoryId(guild, configuredId) {
-  const ch = await guild.channels.fetch(configuredId);
-  if (!ch) return null;
-  if (ch.type === ChannelType.GuildCategory) return ch.id;
-  if ("parentId" in ch && ch.parentId) return ch.parentId;
-  return null;
+  try {
+    const ch = await guild.channels.fetch(configuredId);
+    if (!ch) return null;
+    if (ch.type === ChannelType.GuildCategory) return ch.id;
+    if ("parentId" in ch && ch.parentId) return ch.parentId;
+    return null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function ticketTypeLabel(type) {
