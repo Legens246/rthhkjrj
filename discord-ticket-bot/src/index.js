@@ -303,14 +303,12 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.isModalSubmit()) {
       if (!interaction.guild) return;
+      await interaction.deferReply({ ephemeral: true });
 
       if (interaction.customId === IDS.modalBug) {
         const existing = await findExistingTicket(interaction.guild, interaction.user.id, "bug");
         if (existing) {
-          await interaction.reply({
-            content: `У тебя уже есть открытый тикет: ${existing}`,
-            ephemeral: true
-          });
+          await interaction.editReply(`У тебя уже есть открытый тикет: ${existing}`);
           return;
         }
 
@@ -376,20 +374,14 @@ client.on("interactionCreate", async (interaction) => {
           components: [buildCloseRow()]
         });
 
-        await interaction.reply({
-          content: `Тикет создан: ${ticketChannel}`,
-          ephemeral: true
-        });
+        await interaction.editReply(`Тикет создан: ${ticketChannel}`);
         return;
       }
 
       if (interaction.customId === IDS.modalSupport) {
         const existing = await findExistingTicket(interaction.guild, interaction.user.id, "support");
         if (existing) {
-          await interaction.reply({
-            content: `У тебя уже есть открытый тикет: ${existing}`,
-            ephemeral: true
-          });
+          await interaction.editReply(`У тебя уже есть открытый тикет: ${existing}`);
           return;
         }
 
@@ -451,10 +443,7 @@ client.on("interactionCreate", async (interaction) => {
           components: [buildCloseRow()]
         });
 
-        await interaction.reply({
-          content: `Тикет создан: ${ticketChannel}`,
-          ephemeral: true
-        });
+        await interaction.editReply(`Тикет создан: ${ticketChannel}`);
       }
     }
   } catch (error) {
@@ -464,6 +453,8 @@ client.on("interactionCreate", async (interaction) => {
         content: "Произошла ошибка при обработке запроса.",
         ephemeral: true
       });
+    } else if (interaction.isRepliable() && interaction.deferred && !interaction.replied) {
+      await interaction.editReply("Произошла ошибка при обработке запроса.");
     }
   }
 });
