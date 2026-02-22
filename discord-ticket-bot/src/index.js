@@ -39,6 +39,14 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled rejection:", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+});
+
 const commands = [
   new SlashCommandBuilder()
     .setName("ticket-panel")
@@ -222,9 +230,13 @@ async function closeTicketWithReport(interaction, reason) {
   }, 8000);
 }
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   await registerCommands();
   console.log(`Logged in as ${client.user.tag}`);
+});
+
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
 });
 
 client.on("interactionCreate", async (interaction) => {
