@@ -16,7 +16,14 @@ import {
   TextInputStyle
 } from "discord.js";
 
-const { DISCORD_TOKEN, GUILD_ID, BUG_CATEGORY_ID, SUPPORT_CATEGORY_ID, SUPPORT_ROLE_ID } =
+const {
+  DISCORD_TOKEN,
+  GUILD_ID,
+  BUG_CATEGORY_ID,
+  SUPPORT_CATEGORY_ID,
+  SUPPORT_ROLE_ID,
+  SUPPORT_USER_IDS
+} =
   process.env;
 
 if (!DISCORD_TOKEN || !GUILD_ID || !BUG_CATEGORY_ID || !SUPPORT_CATEGORY_ID) {
@@ -130,6 +137,11 @@ function canManageTicket(member) {
   if (!member) return false;
   if (member.permissions.has(PermissionFlagsBits.ManageChannels)) return true;
   if (SUPPORT_ROLE_ID && member.roles.cache.has(SUPPORT_ROLE_ID)) return true;
+  const supportUserIds = (SUPPORT_USER_IDS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (supportUserIds.includes(member.id)) return true;
   return false;
 }
 
@@ -160,6 +172,29 @@ function ticketTypeLabel(type) {
   if (type === "bug") return "Краши / баги клиента";
   if (type === "support") return "Support";
   return "Неизвестно";
+}
+
+function getSupportUserIds(guild) {
+  const fromEnv = (SUPPORT_USER_IDS || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const unique = new Set(fromEnv);
+  if (guild?.ownerId) unique.add(guild.ownerId);
+  return Array.from(unique);
+}
+
+function buildSupportOverwrites(guild) {
+  const supportUsers = getSupportUserIds(guild);
+  return supportUsers.map((id) => ({
+    id,
+    allow: [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.ManageChannels
+    ]
+  }));
 }
 
 function cut(text, max = 1024) {
@@ -464,7 +499,8 @@ client.on("interactionCreate", async (interaction) => {
                     ]
                   }
                 ]
-              : [])
+              : []),
+            ...buildSupportOverwrites(interaction.guild)
           ]
         });
 
@@ -543,7 +579,8 @@ client.on("interactionCreate", async (interaction) => {
                     ]
                   }
                 ]
-              : [])
+              : []),
+            ...buildSupportOverwrites(interaction.guild)
           ]
         });
 
