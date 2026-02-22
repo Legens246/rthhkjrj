@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -16,17 +16,12 @@ import {
   TextInputStyle
 } from "discord.js";
 
-const {
-  DISCORD_TOKEN,
-  GUILD_ID,
-  BUG_CATEGORY_ID,
-  SUPPORT_CATEGORY_ID,
-  SUPPORT_ROLE_ID
-} = process.env;
+const { DISCORD_TOKEN, GUILD_ID, BUG_CATEGORY_ID, SUPPORT_CATEGORY_ID, SUPPORT_ROLE_ID } =
+  process.env;
 
 if (!DISCORD_TOKEN || !GUILD_ID || !BUG_CATEGORY_ID || !SUPPORT_CATEGORY_ID) {
   console.error(
-    "Missing required env vars. Check .env.example and set DISCORD_TOKEN, GUILD_ID, BUG_CATEGORY_ID, SUPPORT_CATEGORY_ID."
+    "Missing required env vars. Set DISCORD_TOKEN, GUILD_ID, BUG_CATEGORY_ID, SUPPORT_CATEGORY_ID."
   );
   process.exit(1);
 }
@@ -36,7 +31,8 @@ const IDS = {
   openSupportTicket: "open_support_ticket",
   closeTicket: "close_ticket",
   modalBug: "modal_bug_report",
-  modalSupport: "modal_support_report"
+  modalSupport: "modal_support_report",
+  modalClose: "modal_close_ticket"
 };
 
 const client = new Client({
@@ -97,10 +93,7 @@ function buildTicketPanel() {
 
 function buildCloseRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(IDS.closeTicket)
-      .setLabel("Закрыть тикет")
-      .setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(IDS.closeTicket).setLabel("Закрыть тикет").setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -151,6 +144,84 @@ async function resolveTicketCategoryId(guild, configuredId) {
   return null;
 }
 
+function ticketTypeLabel(type) {
+  if (type === "bug") return "Краши / баги клиента";
+  if (type === "support") return "Support";
+  return "Неизвестно";
+}
+
+async function showCloseReasonModal(interaction) {
+  const modal = new ModalBuilder().setCustomId(IDS.modalClose).setTitle("Закрытие тикета");
+  const reasonInput = new TextInputBuilder()
+    .setCustomId("close_reason")
+    .setLabel("Причина закрытия")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(700)
+    .setPlaceholder("Например: не по форме, проблема решена, нарушитель наказан.");
+
+  modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+  await interaction.showModal(modal);
+}
+
+async function closeTicketWithReport(interaction, reason) {
+  const channel = interaction.channel;
+  if (!channel || channel.type !== ChannelType.GuildText) {
+    await interaction.editReply("Это действие доступно только в текстовом тикет-канале.");
+    return;
+  }
+
+  const topic = parseTopic(channel.topic || "");
+  if (!topic.ownerId) {
+    await interaction.editReply("Не удалось определить владельца тикета.");
+    return;
+  }
+
+  let dmStatus = "не доставлен (закрыты ЛС или нет доступа)";
+  try {
+    const owner = await client.users.fetch(topic.ownerId);
+    const dmEmbed = new EmbedBuilder()
+      .setTitle("Ваш тикет закрыт")
+      .setColor(0x57f287)
+      .addFields(
+        { name: "Сервер", value: interaction.guild?.name ?? "Неизвестно" },
+        { name: "Тип тикета", value: ticketTypeLabel(topic.type) },
+        { name: "Канал", value: `#${channel.name}` },
+        { name: "Закрыл", value: `<@${interaction.user.id}>` },
+        { name: "Причина", value: reason }
+      )
+      .setTimestamp();
+
+    await owner.send({ embeds: [dmEmbed] });
+    dmStatus = "отправлен";
+  } catch (error) {
+    console.error("Failed to DM ticket owner:", error);
+  }
+
+  await interaction.editReply("Тикет закрывается. Канал удалится через 8 секунд.");
+  await channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("Тикет закрыт")
+        .setColor(0x5865f2)
+        .addFields(
+          { name: "Закрыл", value: `<@${interaction.user.id}>` },
+          { name: "Причина", value: reason },
+          { name: "Отчет в ЛС автору", value: dmStatus }
+        )
+        .setTimestamp()
+    ]
+  });
+
+  setTimeout(async () => {
+    try {
+      await channel.delete(`Ticket closed by ${interaction.user.tag}`);
+    } catch (error) {
+      console.error("Failed to delete ticket channel:", error);
+    }
+  }, 8000);
+}
+
 client.once("ready", async () => {
   await registerCommands();
   console.log(`Logged in as ${client.user.tag}`);
@@ -161,10 +232,7 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "ticket-panel") {
         const { embed, row } = buildTicketPanel();
-        await interaction.reply({
-          embeds: [embed],
-          components: [row]
-        });
+        await interaction.reply({ embeds: [embed], components: [row] });
         return;
       }
 
@@ -185,19 +253,14 @@ client.on("interactionCreate", async (interaction) => {
           return;
         }
 
-        await interaction.reply("Тикет будет закрыт через 5 секунд...");
-        setTimeout(async () => {
-          await interaction.channel.delete("Ticket closed");
-        }, 5000);
+        await showCloseReasonModal(interaction);
         return;
       }
     }
 
     if (interaction.isButton()) {
       if (interaction.customId === IDS.openBugTicket) {
-        const modal = new ModalBuilder()
-          .setCustomId(IDS.modalBug)
-          .setTitle("Заявка: Краши / баги клиента");
+        const modal = new ModalBuilder().setCustomId(IDS.modalBug).setTitle("Заявка: Краши / баги клиента");
 
         const launcherVersion = new TextInputBuilder()
           .setCustomId("launcher_version")
@@ -247,9 +310,7 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (interaction.customId === IDS.openSupportTicket) {
-        const modal = new ModalBuilder()
-          .setCustomId(IDS.modalSupport)
-          .setTitle("Заявка: Support");
+        const modal = new ModalBuilder().setCustomId(IDS.modalSupport).setTitle("Заявка: Support");
 
         const reason = new TextInputBuilder()
           .setCustomId("reason")
@@ -301,10 +362,7 @@ client.on("interactionCreate", async (interaction) => {
           return;
         }
 
-        await interaction.reply("Тикет будет закрыт через 5 секунд...");
-        setTimeout(async () => {
-          await interaction.channel.delete("Ticket closed");
-        }, 5000);
+        await showCloseReasonModal(interaction);
         return;
       }
     }
@@ -395,10 +453,7 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       if (interaction.customId === IDS.modalSupport) {
-        const supportCategoryId = await resolveTicketCategoryId(
-          interaction.guild,
-          SUPPORT_CATEGORY_ID
-        );
+        const supportCategoryId = await resolveTicketCategoryId(interaction.guild, SUPPORT_CATEGORY_ID);
         if (!supportCategoryId) {
           await interaction.editReply(
             "Не удалось найти категорию для support-тикетов. Укажи ID категории или канал внутри категории в SUPPORT_CATEGORY_ID."
@@ -471,15 +526,25 @@ client.on("interactionCreate", async (interaction) => {
         });
 
         await interaction.editReply(`Тикет создан: ${ticketChannel}`);
+        return;
+      }
+
+      if (interaction.customId === IDS.modalClose) {
+        const topic = parseTopic(interaction.channel?.topic || "");
+        const isOwner = topic.ownerId && topic.ownerId === interaction.user.id;
+        if (!isOwner && !canManageTicket(interaction.member)) {
+          await interaction.editReply("Закрыть тикет может автор или модератор.");
+          return;
+        }
+
+        const closeReason = interaction.fields.getTextInputValue("close_reason");
+        await closeTicketWithReport(interaction, closeReason);
       }
     }
   } catch (error) {
     console.error(error);
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "Произошла ошибка при обработке запроса.",
-        ephemeral: true
-      });
+      await interaction.reply({ content: "Произошла ошибка при обработке запроса.", ephemeral: true });
     } else if (interaction.isRepliable() && interaction.deferred && !interaction.replied) {
       await interaction.editReply("Произошла ошибка при обработке запроса.");
     }
